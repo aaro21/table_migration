@@ -373,32 +373,36 @@ def render_source_selection():
                 
                 df_filtered = df[df['table_type'].isin(table_types)]
                 
-                # Display table
-                selected_row = st.dataframe(
-                    df_filtered,
-                    use_container_width=True,
-                    hide_index=True,
-                    on_select="rerun",
-                    selection_mode="single-row"
-                )
+                # Display table with selection
+                st.dataframe(df_filtered, use_container_width=True, hide_index=True)
                 
-                # Handle selection
-                if selected_row.selection.rows:
-                    selected_idx = selected_row.selection.rows[0]
-                    selected_table = df_filtered.iloc[selected_idx]
+                # Table selection using selectbox
+                if not df_filtered.empty:
+                    table_options = [f"{row['table_name']} ({row['table_type']})" 
+                                   for _, row in df_filtered.iterrows()]
                     
-                    # Load table schema
-                    with st.spinner("Loading table schema..."):
-                        table_info = source_connector.get_table_schema(
-                            selected_table['table_name'],
-                            selected_table['schema_name']
-                        )
+                    selected_option = st.selectbox(
+                        "Select Table/View:",
+                        options=range(len(table_options)),
+                        format_func=lambda x: table_options[x],
+                        key="table_selection"
+                    )
+                    
+                    if selected_option is not None:
+                        selected_table = df_filtered.iloc[selected_option]
                         
-                        if table_info:
-                            st.session_state.current_table_info = table_info
-                            st.success(f"✅ Loaded schema for {selected_table['table_name']}")
-                        else:
-                            st.error("❌ Failed to load table schema")
+                        # Load table schema
+                        with st.spinner("Loading table schema..."):
+                            table_info = source_connector.get_table_schema(
+                                selected_table['table_name'],
+                                selected_table['schema_name']
+                            )
+                            
+                            if table_info:
+                                st.session_state.current_table_info = table_info
+                                st.success(f"✅ Loaded schema for {selected_table['table_name']}")
+                            else:
+                                st.error("❌ Failed to load table schema")
             else:
                 st.info("No tables/views found matching your criteria")
         else:

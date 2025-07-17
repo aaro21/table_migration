@@ -1,4 +1,4 @@
-streamlit==1.29.0
+streamlit==1.39.0
 oracledb==2.0.1
 pyodbc==5.0.1
 GitPython==3.1.40
