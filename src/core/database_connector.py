@@ -213,6 +213,8 @@ class DatabaseConnector:
                         data_type,
                         nullable,
                         data_length,
+                        char_length,
+                        char_used,
                         data_precision,
                         data_scale,
                         data_default
@@ -223,14 +225,27 @@ class DatabaseConnector:
                 """, {'table_name': table_name, 'schema': schema})
                 
                 for row in cursor.fetchall():
+                    # Choose appropriate length based on column type and char_used
+                    data_length = row[3]
+                    char_length = row[4] 
+                    char_used = row[5]
+                    data_type = row[1].upper()
+                    
+                    # For character types, prefer char_length when char_used='C' (character semantics)
+                    # Otherwise use data_length (byte semantics)
+                    if data_type in ['VARCHAR2', 'NVARCHAR2', 'CHAR', 'NCHAR'] and char_used == 'C' and char_length:
+                        max_length = char_length
+                    else:
+                        max_length = data_length
+                    
                     columns.append(ColumnInfo(
                         column_name=row[0],
                         data_type=row[1],
                         nullable=(row[2] == 'Y'),
-                        max_length=row[3],
-                        precision=row[4],
-                        scale=row[5],
-                        default_value=row[6]
+                        max_length=max_length,
+                        precision=row[6],
+                        scale=row[7],
+                        default_value=row[8]
                     ))
                 
                 # Get primary key information

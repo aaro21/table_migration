@@ -101,13 +101,11 @@ class SchemaTranslator:
                 elif new_type == 'NCHAR':
                     new_length = 1    # Default for NCHAR
             
-            # Convert Oracle length to SQL Server length
+            # Apply SQL Server length limits
             if new_type in ['NVARCHAR', 'NCHAR'] and new_length:
-                # Oracle stores byte length, SQL Server stores character length
-                # For Unicode, divide by 4 (Oracle UTF-8 can be up to 4 bytes per char)
-                # Then cap at SQL Server limit
-                new_length = new_length // 4  # Convert from byte length to character length
-                new_length = max(1, min(new_length, 4000))  # Ensure at least 1, max 4000
+                # Oracle char_length gives us character count directly
+                # Just apply SQL Server limits
+                new_length = min(new_length, 4000)  # SQL Server max without MAX
             elif new_type == 'VARBINARY' and new_length:
                 # VARBINARY lengths should be preserved as-is (byte lengths)
                 new_length = min(new_length, 8000)  # SQL Server VARBINARY max without MAX
