@@ -62,10 +62,10 @@ def main():
         
         # Destination Database connections
         st.subheader("Destination Databases")
-        dest_tabs = st.tabs(["TEMP Database", "Bronze Database"])
+        dest_tabs = st.tabs(["Stage Database", "Bronze Database"])
         
         with dest_tabs[0]:
-            render_temp_database_connection()
+            render_stage_database_connection()
         
         with dest_tabs[1]:
             render_bronze_database_connection()
@@ -140,8 +140,8 @@ def render_source_sqlserver_connection():
             st.warning("Please fill in server and database fields")
 
 
-def render_temp_database_connection():
-    st.write("**TEMP Database Connection**")
+def render_stage_database_connection():
+    st.write("**Stage Database Connection**")
     
     temp_host = st.text_input("Server", key="temp_host")
     temp_database = st.text_input("Database", key="temp_database")
@@ -152,9 +152,9 @@ def render_temp_database_connection():
         temp_username = st.text_input("Username", key="temp_username")
         temp_password = st.text_input("Password", type="password", key="temp_password")
     
-    if st.button("Test TEMP Database Connection", key="test_temp"):
+    if st.button("Test Stage Database Connection", key="test_temp"):
         if temp_host and temp_database:
-            with st.spinner("Testing TEMP database connection..."):
+            with st.spinner("Testing Stage database connection..."):
                 if use_trusted_connection:
                     connector = st.session_state.db_manager.create_temp_connector(
                         temp_host, temp_database, trusted=True
@@ -166,9 +166,9 @@ def render_temp_database_connection():
                         password=st.session_state.get('temp_password')
                     )
                 if connector:
-                    st.success("✅ TEMP database connection successful!")
+                    st.success("✅ Stage database connection successful!")
                 else:
-                    st.error("❌ TEMP database connection failed")
+                    st.error("❌ Stage database connection failed")
         else:
             st.warning("Please fill in server and database fields")
 
@@ -253,18 +253,45 @@ def render_migration_settings():
     
     target_database = st.selectbox(
         "Target Database",
-        options=["TEMP", "Bronze"],
+        options=["Stage", "Bronze"],
         key="target_database",
         help="Which database to deploy to"
     )
     
-    target_schema = st.selectbox(
-        "Target Schema",
-        options=["temp_schema", "bronze_schema"],
-        index=0 if st.session_state.get('target_database') == 'TEMP' else 1,
-        key="target_schema",
-        help="Schema to create tables in"
-    )
+    # Get available schemas from the selected target database
+    target_database_selection = st.session_state.get('target_database', 'Stage')
+    
+    if target_database_selection == 'Stage':
+        target_connector = st.session_state.db_manager.get_temp_connector()
+    else:  # Bronze
+        target_connector = st.session_state.db_manager.get_bronze_connector()
+    
+    # Get schemas from the target database connection
+    if target_connector and target_connector.connection:
+        available_schemas = target_connector.get_schemas()
+        if available_schemas:
+            target_schema = st.selectbox(
+                "Target Schema",
+                options=available_schemas,
+                key="target_schema",
+                help="Schema to create tables in (from connected database)"
+            )
+        else:
+            st.warning(f"⚠️ No schemas found in {target_database_selection} database")
+            target_schema = st.text_input(
+                "Target Schema",
+                value="dbo",
+                key="target_schema_manual",
+                help="Enter schema name manually"
+            )
+    else:
+        st.warning(f"⚠️ {target_database_selection} database not connected")
+        target_schema = st.text_input(
+            "Target Schema",
+            value="dbo",
+            key="target_schema_fallback", 
+            help="Connect to database to see available schemas"
+        )
     
     create_view = st.checkbox(
         "Create View",
@@ -286,9 +313,9 @@ def render_migration_settings():
     
     with col2:
         if connection_status['temp']:
-            st.success("✅ TEMP")
+            st.success("✅ Stage")
         else:
-            st.error("❌ TEMP")
+            st.error("❌ Stage")
     
     with col3:
         if connection_status['bronze']:
