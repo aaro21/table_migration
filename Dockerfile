@@ -30,6 +30,10 @@ COPY . .
 # Create necessary directories
 RUN mkdir -p /app/logs /app/repos /app/config
 
+# Copy and set permissions for startup script
+COPY startup.sh /app/startup.sh
+RUN chmod +x /app/startup.sh
+
 # Expose Streamlit port
 EXPOSE 8501
 
@@ -38,5 +42,10 @@ ENV PYTHONPATH=/app/src
 ENV STREAMLIT_SERVER_PORT=8501
 ENV STREAMLIT_SERVER_ADDRESS=0.0.0.0
 
-# Run the application
-CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+# Git repository configuration (can be overridden)
+ENV GIT_REPO_URL="https://github.com/aaro21/table_migration.git"
+ENV GIT_REPO_BRANCH="main"
+ENV GIT_AUTO_CLONE="false"
+
+# Run the startup script
+CMD ["/app/startup.sh"]

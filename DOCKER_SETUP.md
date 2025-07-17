@@ -56,15 +56,48 @@ docker stop data-migration-tool
 docker rm data-migration-tool
 ```
 
-## Volume Mounting for Development
+## Repository Integration Options
 
-If you want to mount your local repository for development:
+### Option 1: Auto-Clone Repository (Recommended for Production)
+
+The container can automatically clone your Git repository on startup:
+
+1. **Enable auto-clone in your .env file:**
+```env
+GIT_AUTO_CLONE=true
+GIT_REPO_URL=https://github.com/aaro21/table_migration.git
+GIT_REPO_BRANCH=main
+```
+
+2. **Run the container:**
+```bash
+docker-compose up -d
+```
+
+The repository will be automatically cloned to `/app/repos/table_migration` inside the container.
+
+### Option 2: Volume Mount Local Repository (Best for Development)
+
+Mount your local repository for development:
 
 ```bash
 docker run -d -p 8501:8501 \
-  -v $(pwd)/repos:/app/repos \
+  -v $(pwd):/app/repos/table_migration \
   -v $(pwd)/config:/app/config \
   -v $(pwd)/logs:/app/logs \
+  --name data-migration-tool \
+  data-migration-tool
+```
+
+### Option 3: Custom Repository Configuration
+
+Override the default repository settings:
+
+```bash
+docker run -d -p 8501:8501 \
+  -e GIT_AUTO_CLONE=true \
+  -e GIT_REPO_URL=https://github.com/your-org/your-repo.git \
+  -e GIT_REPO_BRANCH=develop \
   --name data-migration-tool \
   data-migration-tool
 ```
