@@ -35,6 +35,7 @@ class DatabaseConnector:
     def __init__(self):
         self.connection = None
         self.db_type = None
+        self.connection_info = None
         
     def connect_oracle(self, username: str, password: str, dsn: str) -> bool:
         try:
@@ -44,6 +45,7 @@ class DatabaseConnector:
                 dsn=dsn
             )
             self.db_type = 'oracle'
+            self.connection_info = {'type': 'oracle', 'dsn': dsn, 'username': username}
             logger.info(f"Successfully connected to Oracle database: {dsn}")
             return True
         except Exception as e:
@@ -52,11 +54,11 @@ class DatabaseConnector:
             return False
     
     def connect_sqlserver(self, server: str, database: str, trusted: bool = True, 
-                         username: str = None, password: str = None) -> bool:
+                         username: str = None, password: str = None, connection_name: str = None) -> bool:
         try:
             if trusted:
                 connection_string = (
-                    f"DRIVER={{ODBC Driver 17 for SQL Server}};"
+                    f"DRIVER={{ODBC Driver 18 for SQL Server}};"
                     f"SERVER={server};"
                     f"DATABASE={database};"
                     f"Trusted_Connection=yes;"
@@ -64,7 +66,7 @@ class DatabaseConnector:
                 )
             else:
                 connection_string = (
-                    f"DRIVER={{ODBC Driver 17 for SQL Server}};"
+                    f"DRIVER={{ODBC Driver 18 for SQL Server}};"
                     f"SERVER={server};"
                     f"DATABASE={database};"
                     f"UID={username};"
@@ -74,6 +76,14 @@ class DatabaseConnector:
             
             self.connection = pyodbc.connect(connection_string)
             self.db_type = 'sqlserver'
+            self.connection_info = {
+                'type': 'sqlserver',
+                'server': server,
+                'database': database,
+                'trusted': trusted,
+                'username': username if not trusted else None,
+                'connection_name': connection_name or f"{server}/{database}"
+            }
             logger.info(f"Successfully connected to SQL Server database: {server}/{database}")
             return True
         except Exception as e:
@@ -413,3 +423,65 @@ class DatabaseConnector:
     
     def __del__(self):
         self.close()
+
+
+class DatabaseManager:
+    def __init__(self):
+        self.source_connector = None
+        self.temp_connector = None
+        self.bronze_connector = None
+        
+    def create_oracle_source_connector(self, username: str, password: str, dsn: str) -> DatabaseConnector:
+        connector = DatabaseConnector()
+        if connector.connect_oracle(username, password, dsn):
+            self.source_connector = connector
+            return connector
+        return None
+    
+    def create_sqlserver_source_connector(self, server: str, database: str, trusted: bool = True, 
+                                        username: str = None, password: str = None) -> DatabaseConnector:
+        connector = DatabaseConnector()
+        if connector.connect_sqlserver(server, database, trusted, username, password, "Source SQL Server"):
+            self.source_connector = connector
+            return connector
+        return None
+    
+    def create_temp_connector(self, server: str, database: str, trusted: bool = True, 
+                            username: str = None, password: str = None) -> DatabaseConnector:
+        connector = DatabaseConnector()
+        if connector.connect_sqlserver(server, database, trusted, username, password, "TEMP Database"):
+            self.temp_connector = connector
+            return connector
+        return None
+    
+    def create_bronze_connector(self, server: str, database: str, trusted: bool = True, 
+                              username: str = None, password: str = None) -> DatabaseConnector:
+        connector = DatabaseConnector()
+        if connector.connect_sqlserver(server, database, trusted, username, password, "Bronze Database"):
+            self.bronze_connector = connector
+            return connector
+        return None
+    
+    def get_source_connector(self) -> Optional[DatabaseConnector]:
+        return self.source_connector
+    
+    def get_temp_connector(self) -> Optional[DatabaseConnector]:
+        return self.temp_connector
+    
+    def get_bronze_connector(self) -> Optional[DatabaseConnector]:
+        return self.bronze_connector
+    
+    def close_all_connections(self):
+        if self.source_connector:
+            self.source_connector.close()
+        if self.temp_connector:
+            self.temp_connector.close()
+        if self.bronze_connector:
+            self.bronze_connector.close()
+    
+    def get_connection_status(self) -> Dict[str, bool]:
+        return {
+            'source': self.source_connector is not None and self.source_connector.validate_connection(),
+            'temp': self.temp_connector is not None and self.temp_connector.validate_connection(),
+            'bronze': self.bronze_connector is not None and self.bronze_connector.validate_connection()
+        }

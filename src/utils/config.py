@@ -19,10 +19,26 @@ def load_config() -> Dict[str, Any]:
             'username': os.getenv('ORACLE_USERNAME', ''),
             'password': os.getenv('ORACLE_PASSWORD', '')
         },
-        'sqlserver': {
-            'host': os.getenv('SQL_SERVER_HOST', ''),
-            'database': os.getenv('SQL_SERVER_DATABASE', ''),
-            'trusted_connection': os.getenv('SQL_SERVER_TRUSTED_CONNECTION', 'yes').lower() == 'yes'
+        'source_sqlserver': {
+            'host': os.getenv('SOURCE_SQL_SERVER_HOST', ''),
+            'database': os.getenv('SOURCE_SQL_SERVER_DATABASE', ''),
+            'trusted_connection': os.getenv('SOURCE_SQL_SERVER_TRUSTED_CONNECTION', 'yes').lower() == 'yes',
+            'username': os.getenv('SOURCE_SQL_SERVER_USERNAME', ''),
+            'password': os.getenv('SOURCE_SQL_SERVER_PASSWORD', '')
+        },
+        'temp_sqlserver': {
+            'host': os.getenv('TEMP_SQL_SERVER_HOST', ''),
+            'database': os.getenv('TEMP_SQL_SERVER_DATABASE', ''),
+            'trusted_connection': os.getenv('TEMP_SQL_SERVER_TRUSTED_CONNECTION', 'yes').lower() == 'yes',
+            'username': os.getenv('TEMP_SQL_SERVER_USERNAME', ''),
+            'password': os.getenv('TEMP_SQL_SERVER_PASSWORD', '')
+        },
+        'bronze_sqlserver': {
+            'host': os.getenv('BRONZE_SQL_SERVER_HOST', ''),
+            'database': os.getenv('BRONZE_SQL_SERVER_DATABASE', ''),
+            'trusted_connection': os.getenv('BRONZE_SQL_SERVER_TRUSTED_CONNECTION', 'yes').lower() == 'yes',
+            'username': os.getenv('BRONZE_SQL_SERVER_USERNAME', ''),
+            'password': os.getenv('BRONZE_SQL_SERVER_PASSWORD', '')
         },
         
         # AI configuration

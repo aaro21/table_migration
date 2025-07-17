@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any
 import os
 from pathlib import Path
 
-from core.database_connector import DatabaseConnector, TableInfo
+from core.database_connector import DatabaseConnector, DatabaseManager, TableInfo
 from core.schema_translator import SchemaTranslator
 from core.git_manager import GitManager
 from utils.config import load_config
@@ -20,14 +20,18 @@ def main():
     )
     
     # Initialize session state
-    if 'db_connector' not in st.session_state:
-        st.session_state.db_connector = DatabaseConnector()
+    if 'db_manager' not in st.session_state:
+        st.session_state.db_manager = DatabaseManager()
     if 'translator' not in st.session_state:
         st.session_state.translator = SchemaTranslator()
     if 'current_table_info' not in st.session_state:
         st.session_state.current_table_info = None
     if 'migration_config' not in st.session_state:
         st.session_state.migration_config = {}
+    if 'selected_source_type' not in st.session_state:
+        st.session_state.selected_source_type = 'oracle'
+    if 'selected_target_database' not in st.session_state:
+        st.session_state.selected_target_database = 'temp'
     
     # Setup logging
     setup_logging()
@@ -43,15 +47,28 @@ def main():
     with st.sidebar:
         st.header("Configuration")
         
-        # Database connection section
-        st.subheader("Database Connection")
-        connection_tab = st.tabs(["Oracle", "SQL Server"])
+        # Source Database connection section
+        st.subheader("Source Database Connection")
+        source_type = st.selectbox(
+            "Source Database Type",
+            options=["Oracle", "SQL Server"],
+            key="source_database_type"
+        )
         
-        with connection_tab[0]:
+        if source_type == "Oracle":
             render_oracle_connection()
+        else:
+            render_source_sqlserver_connection()
         
-        with connection_tab[1]:
-            render_sqlserver_connection()
+        # Destination Database connections
+        st.subheader("Destination Databases")
+        dest_tabs = st.tabs(["TEMP Database", "Bronze Database"])
+        
+        with dest_tabs[0]:
+            render_temp_database_connection()
+        
+        with dest_tabs[1]:
+            render_bronze_database_connection()
         
         # Git configuration section
         st.subheader("Git Configuration")
@@ -62,26 +79,27 @@ def main():
         render_migration_settings()
     
     # Main content area
-    if st.session_state.db_connector.connection:
+    source_connector = st.session_state.db_manager.get_source_connector()
+    if source_connector and source_connector.connection:
         render_main_content()
     else:
-        st.info("👈 Please configure and test your database connection in the sidebar to get started.")
+        st.info("👈 Please configure and test your source database connection in the sidebar to get started.")
 
 
 def render_oracle_connection():
-    st.write("**Oracle Database Connection**")
+    st.write("**Oracle Source Database**")
     
     oracle_username = st.text_input("Username", key="oracle_username")
     oracle_password = st.text_input("Password", type="password", key="oracle_password")
-    oracle_dsn = st.text_input("DSN", key="oracle_dsn", help="Format: host:port/service_name")
+    oracle_dsn = st.text_input("DSN", key="oracle_dsn", help="Format: host:port/service_name or host:port:sid")
     
     if st.button("Test Oracle Connection", key="test_oracle"):
         if oracle_username and oracle_password and oracle_dsn:
             with st.spinner("Testing Oracle connection..."):
-                success = st.session_state.db_connector.connect_oracle(
+                connector = st.session_state.db_manager.create_oracle_source_connector(
                     oracle_username, oracle_password, oracle_dsn
                 )
-                if success:
+                if connector:
                     st.success("✅ Oracle connection successful!")
                 else:
                     st.error("❌ Oracle connection failed")
@@ -89,35 +107,101 @@ def render_oracle_connection():
             st.warning("Please fill in all Oracle connection fields")
 
 
-def render_sqlserver_connection():
-    st.write("**SQL Server Database Connection**")
+def render_source_sqlserver_connection():
+    st.write("**SQL Server Source Database**")
     
-    sqlserver_host = st.text_input("Server", key="sqlserver_host")
-    sqlserver_database = st.text_input("Database", key="sqlserver_database")
+    sqlserver_host = st.text_input("Server", key="source_sqlserver_host")
+    sqlserver_database = st.text_input("Database", key="source_sqlserver_database")
     
-    use_trusted_connection = st.checkbox("Use Trusted Connection", value=True, key="use_trusted")
+    use_trusted_connection = st.checkbox("Use Trusted Connection", value=True, key="source_use_trusted")
     
     if not use_trusted_connection:
-        sqlserver_username = st.text_input("Username", key="sqlserver_username")
-        sqlserver_password = st.text_input("Password", type="password", key="sqlserver_password")
+        sqlserver_username = st.text_input("Username", key="source_sqlserver_username")
+        sqlserver_password = st.text_input("Password", type="password", key="source_sqlserver_password")
     
-    if st.button("Test SQL Server Connection", key="test_sqlserver"):
+    if st.button("Test Source SQL Server Connection", key="test_source_sqlserver"):
         if sqlserver_host and sqlserver_database:
             with st.spinner("Testing SQL Server connection..."):
                 if use_trusted_connection:
-                    success = st.session_state.db_connector.connect_sqlserver(
+                    connector = st.session_state.db_manager.create_sqlserver_source_connector(
                         sqlserver_host, sqlserver_database, trusted=True
                     )
                 else:
-                    success = st.session_state.db_connector.connect_sqlserver(
+                    connector = st.session_state.db_manager.create_sqlserver_source_connector(
                         sqlserver_host, sqlserver_database, trusted=False,
-                        username=st.session_state.get('sqlserver_username'),
-                        password=st.session_state.get('sqlserver_password')
+                        username=st.session_state.get('source_sqlserver_username'),
+                        password=st.session_state.get('source_sqlserver_password')
                     )
-                if success:
-                    st.success("✅ SQL Server connection successful!")
+                if connector:
+                    st.success("✅ Source SQL Server connection successful!")
                 else:
-                    st.error("❌ SQL Server connection failed")
+                    st.error("❌ Source SQL Server connection failed")
+        else:
+            st.warning("Please fill in server and database fields")
+
+
+def render_temp_database_connection():
+    st.write("**TEMP Database Connection**")
+    
+    temp_host = st.text_input("Server", key="temp_host")
+    temp_database = st.text_input("Database", key="temp_database")
+    
+    use_trusted_connection = st.checkbox("Use Trusted Connection", value=True, key="temp_use_trusted")
+    
+    if not use_trusted_connection:
+        temp_username = st.text_input("Username", key="temp_username")
+        temp_password = st.text_input("Password", type="password", key="temp_password")
+    
+    if st.button("Test TEMP Database Connection", key="test_temp"):
+        if temp_host and temp_database:
+            with st.spinner("Testing TEMP database connection..."):
+                if use_trusted_connection:
+                    connector = st.session_state.db_manager.create_temp_connector(
+                        temp_host, temp_database, trusted=True
+                    )
+                else:
+                    connector = st.session_state.db_manager.create_temp_connector(
+                        temp_host, temp_database, trusted=False,
+                        username=st.session_state.get('temp_username'),
+                        password=st.session_state.get('temp_password')
+                    )
+                if connector:
+                    st.success("✅ TEMP database connection successful!")
+                else:
+                    st.error("❌ TEMP database connection failed")
+        else:
+            st.warning("Please fill in server and database fields")
+
+
+def render_bronze_database_connection():
+    st.write("**Bronze Database Connection**")
+    
+    bronze_host = st.text_input("Server", key="bronze_host")
+    bronze_database = st.text_input("Database", key="bronze_database")
+    
+    use_trusted_connection = st.checkbox("Use Trusted Connection", value=True, key="bronze_use_trusted")
+    
+    if not use_trusted_connection:
+        bronze_username = st.text_input("Username", key="bronze_username")
+        bronze_password = st.text_input("Password", type="password", key="bronze_password")
+    
+    if st.button("Test Bronze Database Connection", key="test_bronze"):
+        if bronze_host and bronze_database:
+            with st.spinner("Testing Bronze database connection..."):
+                if use_trusted_connection:
+                    connector = st.session_state.db_manager.create_bronze_connector(
+                        bronze_host, bronze_database, trusted=True
+                    )
+                else:
+                    connector = st.session_state.db_manager.create_bronze_connector(
+                        bronze_host, bronze_database, trusted=False,
+                        username=st.session_state.get('bronze_username'),
+                        password=st.session_state.get('bronze_password')
+                    )
+                if connector:
+                    st.success("✅ Bronze database connection successful!")
+                else:
+                    st.error("❌ Bronze database connection failed")
         else:
             st.warning("Please fill in server and database fields")
 
@@ -160,16 +244,24 @@ def render_migration_settings():
         help="Prefix to add to table names (e.g., 'oracle', 'legacy')"
     )
     
-    target_database = st.text_input(
-        "Target Database Name",
+    target_database_name = st.text_input(
+        "Target Database Project Name",
         value="DataWarehouse",
-        key="target_database",
+        key="target_database_name",
         help="Name of the target database project"
+    )
+    
+    target_database = st.selectbox(
+        "Target Database",
+        options=["TEMP", "Bronze"],
+        key="target_database",
+        help="Which database to deploy to"
     )
     
     target_schema = st.selectbox(
         "Target Schema",
         options=["temp_schema", "bronze_schema"],
+        index=0 if st.session_state.get('target_database') == 'TEMP' else 1,
         key="target_schema",
         help="Schema to create tables in"
     )
@@ -181,9 +273,33 @@ def render_migration_settings():
         help="Create a view with original table name"
     )
     
+    # Connection status display
+    st.write("**Connection Status:**")
+    connection_status = st.session_state.db_manager.get_connection_status()
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        if connection_status['source']:
+            st.success("✅ Source")
+        else:
+            st.error("❌ Source")
+    
+    with col2:
+        if connection_status['temp']:
+            st.success("✅ TEMP")
+        else:
+            st.error("❌ TEMP")
+    
+    with col3:
+        if connection_status['bronze']:
+            st.success("✅ Bronze")
+        else:
+            st.error("❌ Bronze")
+    
     # Store settings in session state
     st.session_state.migration_config.update({
         'source_prefix': source_prefix,
+        'target_database_name': target_database_name,
         'target_database': target_database,
         'target_schema': target_schema,
         'create_view': create_view
@@ -212,8 +328,13 @@ def render_main_content():
 
 
 def render_source_selection():
-    # Get available schemas
-    schemas = st.session_state.db_connector.get_schemas()
+    # Get available schemas from source connector
+    source_connector = st.session_state.db_manager.get_source_connector()
+    if not source_connector:
+        st.warning("No source database connection available")
+        return
+        
+    schemas = source_connector.get_schemas()
     
     if not schemas:
         st.warning("No schemas found or connection issue")
@@ -228,7 +349,7 @@ def render_source_selection():
     
     if selected_schema:
         # Get tables and views
-        tables_and_views = st.session_state.db_connector.get_tables_and_views(selected_schema)
+        tables_and_views = source_connector.get_tables_and_views(selected_schema)
         
         if tables_and_views:
             # Create a DataFrame for better display
@@ -268,7 +389,7 @@ def render_source_selection():
                     
                     # Load table schema
                     with st.spinner("Loading table schema..."):
-                        table_info = st.session_state.db_connector.get_table_schema(
+                        table_info = source_connector.get_table_schema(
                             selected_table['table_name'],
                             selected_table['schema_name']
                         )
@@ -315,7 +436,8 @@ def render_schema_preview():
         # Sample data
         if st.button("Show Sample Data", key="show_sample"):
             with st.spinner("Loading sample data..."):
-                sample_data = st.session_state.db_connector.get_sample_data(
+                source_connector = st.session_state.db_manager.get_source_connector()
+                sample_data = source_connector.get_sample_data(
                     table_info.table_name,
                     table_info.schema_name,
                     rows=5
@@ -355,8 +477,11 @@ def generate_ddl_preview():
     translator = st.session_state.translator
     
     try:
+        # Get source connector to determine database type
+        source_connector = st.session_state.db_manager.get_source_connector()
+        
         # Translate schema if coming from Oracle
-        if st.session_state.db_connector.db_type == 'oracle':
+        if source_connector.db_type == 'oracle':
             translated_table = translator.translate_oracle_to_sqlserver(table_info)
         else:
             translated_table = table_info
@@ -409,9 +534,10 @@ def show_storage_impact():
     
     table_info = st.session_state.current_table_info
     translator = st.session_state.translator
+    source_connector = st.session_state.db_manager.get_source_connector()
     
     # Translate schema for accurate storage estimation
-    if st.session_state.db_connector.db_type == 'oracle':
+    if source_connector.db_type == 'oracle':
         translated_table = translator.translate_oracle_to_sqlserver(table_info)
     else:
         translated_table = table_info
@@ -489,7 +615,7 @@ def execute_migration(branch_name: str, commit_message: str):
         
         # Step 2: Create directory structure
         status_text.text("Creating directory structure...")
-        success, message = git_manager.create_directory_structure(config['target_database'])
+        success, message = git_manager.create_directory_structure(config['target_database_name'])
         if not success:
             st.error(f"❌ Failed to create directories: {message}")
             return
@@ -499,7 +625,7 @@ def execute_migration(branch_name: str, commit_message: str):
         status_text.text("Writing DDL files...")
         success, message, created_files = git_manager.write_files(
             ddl_output.files_to_create,
-            config['target_database']
+            config['target_database_name']
         )
         if not success:
             st.error(f"❌ Failed to write files: {message}")
@@ -509,7 +635,7 @@ def execute_migration(branch_name: str, commit_message: str):
         # Step 4: Update .sqlproj file
         status_text.text("Updating .sqlproj file...")
         sqlproj_entries = st.session_state.translator.generate_sqlproj_entries(ddl_output.files_to_create)
-        success, message = git_manager.update_sqlproj(config['target_database'], sqlproj_entries)
+        success, message = git_manager.update_sqlproj(config['target_database_name'], sqlproj_entries)
         if not success:
             st.error(f"❌ Failed to update .sqlproj: {message}")
             return
@@ -517,7 +643,7 @@ def execute_migration(branch_name: str, commit_message: str):
         
         # Step 5: Commit changes
         status_text.text("Committing changes...")
-        all_files = created_files + [f"{config['target_database']}/{config['target_database']}.sqlproj"]
+        all_files = created_files + [f"{config['target_database_name']}/{config['target_database_name']}.sqlproj"]
         success, message = git_manager.commit_changes(commit_message, all_files)
         if not success:
             st.error(f"❌ Failed to commit changes: {message}")

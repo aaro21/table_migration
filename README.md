@@ -66,14 +66,33 @@ docker-compose up
 Create a `.env` file with the following variables:
 
 ```env
-# Database Configuration
+# Source Database Configuration
+# Oracle Source
 ORACLE_DSN=your_oracle_dsn_here
 ORACLE_USERNAME=your_oracle_username
 ORACLE_PASSWORD=your_oracle_password
 
-SQL_SERVER_HOST=your_sql_server_host
-SQL_SERVER_DATABASE=your_database_name
-SQL_SERVER_TRUSTED_CONNECTION=yes
+# SQL Server Source (if migrating from SQL Server)
+SOURCE_SQL_SERVER_HOST=your_source_sql_server_host
+SOURCE_SQL_SERVER_DATABASE=your_source_database_name
+SOURCE_SQL_SERVER_TRUSTED_CONNECTION=yes
+SOURCE_SQL_SERVER_USERNAME=your_source_username
+SOURCE_SQL_SERVER_PASSWORD=your_source_password
+
+# Destination Database Configuration
+# TEMP Database
+TEMP_SQL_SERVER_HOST=your_temp_sql_server_host
+TEMP_SQL_SERVER_DATABASE=your_temp_database_name
+TEMP_SQL_SERVER_TRUSTED_CONNECTION=yes
+TEMP_SQL_SERVER_USERNAME=your_temp_username
+TEMP_SQL_SERVER_PASSWORD=your_temp_password
+
+# Bronze Database
+BRONZE_SQL_SERVER_HOST=your_bronze_sql_server_host
+BRONZE_SQL_SERVER_DATABASE=your_bronze_database_name
+BRONZE_SQL_SERVER_TRUSTED_CONNECTION=yes
+BRONZE_SQL_SERVER_USERNAME=your_bronze_username
+BRONZE_SQL_SERVER_PASSWORD=your_bronze_password
 
 # AI Configuration
 OPENAI_API_KEY=your_openai_api_key
@@ -98,33 +117,44 @@ GIT_AUTHOR_EMAIL=data-migration@company.com
 
 ## Usage
 
-### Basic Migration Workflow
+### Enhanced Migration Workflow
 
 1. **Connect to Source Database**
-   - Select Oracle or SQL Server
-   - Enter connection details
-   - Test connection
+   - Select Oracle or SQL Server as source
+   - Enter source connection details
+   - Test source connection
 
-2. **Configure Git Settings**
+2. **Connect to Destination Databases**
+   - Configure TEMP database connection
+   - Configure Bronze database connection
+   - Test destination connections
+
+3. **Configure Git Settings**
    - Set repository path
    - Specify base branch
    - Validate Git setup
 
-3. **Select Source Object**
+4. **Select Source Object**
    - Browse available schemas
    - Search and filter tables/views
    - Preview table structure
 
-4. **Generate DDL**
-   - Configure naming conventions
-   - Generate SQL Server DDL
-   - Preview generated files
+5. **Configure Migration Settings**
+   - Set source system prefix
+   - Choose target database (TEMP or Bronze)
+   - Select target schema
+   - Configure view creation options
 
-5. **Execute Migration**
+6. **Generate DDL**
+   - Generate SQL Server DDL with data type mapping
+   - Preview generated files
+   - Review storage impact analysis
+
+7. **Execute Migration**
    - Create feature branch
-   - Generate files
-   - Update .sqlproj
-   - Commit changes
+   - Generate DDL files in correct database project
+   - Update .sqlproj files automatically
+   - Commit changes with detailed messages
 
 ### Data Type Mapping
 
